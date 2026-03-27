@@ -237,7 +237,7 @@ async def cb_detail(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         f'🔗 <a href="{ui.e(p["url"])}">Ver en tienda →</a>'
     )
 
-    back_data = f"{nav_prefix}:{page}"
+    back_data = nav_prefix if page == "0" else f"{nav_prefix}:{page}"
     buttons = []
     if p["stock_status"] == "out_of_stock":
         buttons.append(

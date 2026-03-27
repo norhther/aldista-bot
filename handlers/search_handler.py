@@ -10,7 +10,6 @@ import config
 import ui
 
 WAITING_QUERY = 1
-_AWAITING_KEY = "awaiting_search"
 _MAX_RESULTS = 20
 
 
@@ -84,23 +83,20 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 
 async def cb_menu_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Triggered by the 🔍 Buscar menu button — sets a flag and prompts for input."""
+    """Triggered by the 🔍 Buscar menu button."""
     query = update.callback_query
     await query.answer()
-    context.user_data[_AWAITING_KEY] = True
     await query.edit_message_text(
         "🔍 <b>Buscar tabaco</b>\n"
         f"{ui.divider()}\n"
         "Escribe el <b>nombre</b>, <b>marca</b> o <b>referencia</b> que buscas.\n"
-        "<i>Cancela con /cancel</i>",
+        "<i>Sigue escribiendo para buscar más. Pulsa un botón para salir.</i>",
         parse_mode="HTML",
     )
 
 
 async def handle_free_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Catches plain text messages when the user initiated search from the menu button."""
-    if not context.user_data.pop(_AWAITING_KEY, False):
-        return  # not awaiting a search — ignore
+    """Handles any plain text message as a search query."""
     query_text = update.message.text.strip()
     results = cat.search(query_text)
     text, markup = _results_text_and_markup(results, query_text)
