@@ -10,6 +10,7 @@ import config
 import ui
 
 WAITING_QUERY = 1
+_AWAITING_KEY = "awaiting_search"
 _MAX_RESULTS = 20
 
 
@@ -42,7 +43,7 @@ def _results_text_and_markup(results: list[dict], query: str) -> tuple[str, Inli
     keyboard = [
         [InlineKeyboardButton(
             f"{'🟢' if p['stock_status'] == 'in_stock' else '🔴'}  {p['name'][:38]}",
-            callback_data=f"detail:{p['product_id']}:search_back:{i}",
+            callback_data=f"detail:{p['product_id']}:menu:main:0",
         )]
         for i, p in enumerate(shown, 1)
     ]
@@ -80,6 +81,30 @@ async def receive_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Búsqueda cancelada.", parse_mode="HTML")
     return ConversationHandler.END
+
+
+async def cb_menu_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Triggered by the 🔍 Buscar menu button — sets a flag and prompts for input."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data[_AWAITING_KEY] = True
+    await query.edit_message_text(
+        "🔍 <b>Buscar tabaco</b>\n"
+        f"{ui.divider()}\n"
+        "Escribe el <b>nombre</b>, <b>marca</b> o <b>referencia</b> que buscas.\n"
+        "<i>Cancela con /cancel</i>",
+        parse_mode="HTML",
+    )
+
+
+async def handle_free_search(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Catches plain text messages when the user initiated search from the menu button."""
+    if not context.user_data.pop(_AWAITING_KEY, False):
+        return  # not awaiting a search — ignore
+    query_text = update.message.text.strip()
+    results = cat.search(query_text)
+    text, markup = _results_text_and_markup(results, query_text)
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
 
 
 def build_search_conversation() -> ConversationHandler:

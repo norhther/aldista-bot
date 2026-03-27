@@ -10,6 +10,8 @@ from telegram.ext import (
     CommandHandler,
 )
 
+from telegram.ext import MessageHandler, filters
+
 import config
 from handlers.start import start, help_cmd, cb_main_menu
 from handlers.list_handler import (
@@ -24,7 +26,7 @@ from handlers.list_handler import (
     cb_stats,
     cb_detail,
 )
-from handlers.search_handler import build_search_conversation
+from handlers.search_handler import build_search_conversation, cb_menu_search, handle_free_search
 from handlers.alerts_handler import (
     myalerts_cmd,
     cb_alert_add,
@@ -40,19 +42,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-async def cb_menu_search(update, context) -> None:
-    """Prompt user to type a search query via callback."""
-    import ui
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(
-        "🔍 <b>Buscar tabaco</b>\n"
-        f"{ui.divider()}\n"
-        "Envía el nombre, marca o referencia que buscas.\n"
-        "<i>Cancela con /cancel</i>",
-        parse_mode="HTML",
-    )
 
 
 def main() -> None:
@@ -87,6 +76,9 @@ def main() -> None:
     # ── Alert callbacks
     app.add_handler(CallbackQueryHandler(cb_alert_add, pattern=r"^alert_add:"))
     app.add_handler(CallbackQueryHandler(cb_alert_del, pattern=r"^alert_del:"))
+
+    # ── Free-text handler for menu-initiated search (lowest priority)
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_free_search))
 
     # ── Scheduled stock check
     app.job_queue.run_repeating(
