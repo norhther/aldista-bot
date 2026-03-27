@@ -1,4 +1,4 @@
-"""Alert management: add, list, cancel alerts per user."""
+"""Alert management: add, list, cancel back-in-stock alerts per user."""
 
 from __future__ import annotations
 
@@ -9,15 +9,15 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 
 import catalog as cat
+import ui
 
 _STATE_FILE = Path(__file__).parent.parent / "alerts_state.json"
 WAITING_ALERT_QUERY = 10
 
 
-# ── Persistence helpers ───────────────────────────────────────────────────────
+# ── Persistence ───────────────────────────────────────────────────────────────
 
 def _load() -> dict[str, list[str]]:
-    """Returns {str(user_id): [product_id, ...]}"""
     if _STATE_FILE.exists():
         return json.loads(_STATE_FILE.read_text())
     return {}
@@ -32,10 +32,8 @@ def user_alerts(user_id: int) -> list[str]:
 
 
 def add_alert(user_id: int, product_id: str) -> bool:
-    """Returns True if added, False if already existed."""
     state = _load()
-    key = str(user_id)
-    alerts = state.setdefault(key, [])
+    alerts = state.setdefault(str(user_id), [])
     if product_id in alerts:
         return False
     alerts.append(product_id)
@@ -57,15 +55,63 @@ def all_alerts() -> dict[str, list[str]]:
     return _load()
 
 
+# ── Shared renderers ──────────────────────────────────────────────────────────
+
+def _alerts_text_and_markup(ids: list[str]) -> tuple[str, InlineKeyboardMarkup]:
+    lines = [
+        f"🔔 <b>Tus alertas activas</b>",
+        f"<i>Te avisaremos cuando vuelvan al stock.</i>",
+        ui.divider(),
+    ]
+    keyboard: list[list[InlineKeyboardButton]] = []
+
+    for pid in ids:
+        p = cat.get_by_id(pid)
+        if p:
+            badge = "🟢" if p["stock_status"] == "in_stock" else "🔴"
+            lines.append(f"{badge} {ui.e(p['name'])}  —  <b>{ui.e(p['price'])}</b>")
+            keyboard.append([
+                InlineKeyboardButton(
+                    f"🗑  {p['name'][:36]}",
+                    callback_data=f"alert_del:{pid}",
+                )
+            ])
+        else:
+            lines.append(f"⚠️  Producto <code>{ui.e(pid)}</code> no encontrado")
+            keyboard.append([
+                InlineKeyboardButton(f"🗑  Eliminar {pid}", callback_data=f"alert_del:{pid}")
+            ])
+
+    keyboard.append([InlineKeyboardButton("🏠  Inicio", callback_data="menu:main")])
+    return "\n".join(lines), InlineKeyboardMarkup(keyboard)
+
+
+def _no_alerts_text_and_markup() -> tuple[str, InlineKeyboardMarkup]:
+    text = (
+        "🔔 <b>Sin alertas activas</b>\n"
+        f"{ui.divider()}\n"
+        "No tienes ninguna alerta configurada.\n"
+        "Busca un tabaco agotado y pulsa <i>Alertar cuando vuelva</i>."
+    )
+    markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔍  Buscar tabaco", callback_data="menu:search")],
+        [InlineKeyboardButton("🏠  Inicio", callback_data="menu:main")],
+    ])
+    return text, markup
+
+
 # ── Command handlers ──────────────────────────────────────────────────────────
 
 async def alert_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if context.args:
-        query = " ".join(context.args)
-        return await _handle_alert_query(update, query)
-
+        return await _handle_alert_query(update, " ".join(context.args))
     await update.message.reply_text(
-        "🔔 ¿Para qué tabaco quieres una alerta? Escribe el nombre o marca:"
+        "🔔 <b>Nueva alerta</b>\n"
+        f"{ui.divider()}\n"
+        "Escribe el nombre o marca del tabaco para el que quieres la alerta.\n"
+        "<i>Solo podrás alertar tabacos agotados.</i>\n"
+        "<i>Cancela con /cancel</i>",
+        parse_mode="HTML",
     )
     return WAITING_ALERT_QUERY
 
@@ -79,73 +125,66 @@ async def _handle_alert_query(update: Update, query: str) -> int:
     oos = [p for p in results if p["stock_status"] == "out_of_stock"]
 
     if not results:
-        await update.message.reply_text(f'❌ Sin resultados para "*{query}*".', parse_mode="Markdown")
-        return ConversationHandler.END
-
-    if not oos:
         await update.message.reply_text(
-            f'✅ Todos los resultados para "*{query}*" están en stock. ¡No necesitas alerta!',
-            parse_mode="Markdown",
+            f"❌ <b>Sin resultados</b>\n"
+            f"{ui.divider()}\n"
+            f"No encontré nada para <i>{ui.e(query)}</i>.",
+            parse_mode="HTML",
         )
         return ConversationHandler.END
 
+    if not oos:
+        in_stock_names = ", ".join(ui.e(p["name"][:20]) for p in results[:3])
+        await update.message.reply_text(
+            f"✅ <b>¡Todo en stock!</b>\n"
+            f"{ui.divider()}\n"
+            f"Los resultados para <i>{ui.e(query)}</i> están disponibles:\n"
+            f"<i>{in_stock_names}…</i>\n\n"
+            "No necesitas crear ninguna alerta.",
+            parse_mode="HTML",
+        )
+        return ConversationHandler.END
+
+    lines = [
+        f"🔔 <b>Alertas para «{ui.e(query)}»</b>",
+        f"<i>{len(oos)} agotado(s) encontrado(s). Elige cuál añadir:</i>",
+        ui.divider(),
+    ]
+    for p in oos[:10]:
+        lines.append(f"🔴 {ui.e(p['name'])}  —  <b>{ui.e(p['price'])}</b>")
+
     keyboard = [
         [InlineKeyboardButton(
-            f"🔔 {p['name'][:35]}",
+            f"🔔  {p['name'][:38]}",
             callback_data=f"alert_add:{p['product_id']}",
         )]
         for p in oos[:10]
     ]
-    keyboard.append([InlineKeyboardButton("❌ Cancelar", callback_data="menu:main")])
+    keyboard.append([InlineKeyboardButton("❌  Cancelar", callback_data="menu:main")])
 
     await update.message.reply_text(
-        f"🔔 Productos agotados que coinciden con *{query}*.\nElige uno para crear la alerta:",
-        parse_mode="Markdown",
+        "\n".join(lines),
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
     return ConversationHandler.END
 
 
 async def myalerts_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    ids = user_alerts(user_id)
+    ids = user_alerts(update.effective_user.id)
     if not ids:
-        await update.message.reply_text("📭 No tienes alertas activas.")
-        return
-    await _show_alerts(update.message, user_id, ids)
+        text, markup = _no_alerts_text_and_markup()
+    else:
+        text, markup = _alerts_text_and_markup(ids)
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
 
 
 async def cancel_alert_conv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("❌ Operación cancelada.")
+    await update.message.reply_text("Operación cancelada.")
     return ConversationHandler.END
 
 
-async def _show_alerts(message, user_id: int, ids: list[str]) -> None:
-    lines = ["🔔 *Tus alertas activas:*\n"]
-    keyboard = []
-    for pid in ids:
-        p = cat.get_by_id(pid)
-        if p:
-            icon = "✅" if p["stock_status"] == "in_stock" else "❌"
-            lines.append(f"{icon} {p['name']} — {p['price']}")
-            keyboard.append([
-                InlineKeyboardButton(
-                    f"🗑 Eliminar: {p['name'][:28]}",
-                    callback_data=f"alert_del:{pid}",
-                )
-            ])
-        else:
-            lines.append(f"⚠️ Producto {pid} no encontrado")
-            keyboard.append([
-                InlineKeyboardButton(f"🗑 Eliminar {pid}", callback_data=f"alert_del:{pid}")
-            ])
-    keyboard.append([InlineKeyboardButton("🏠 Menú", callback_data="menu:main")])
-    await message.reply_text(
-        "\n".join(lines), parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
-    )
-
-
-# ── Callback handlers (registered in main.py) ────────────────────────────────
+# ── Callback handlers ─────────────────────────────────────────────────────────
 
 async def cb_alert_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -161,15 +200,29 @@ async def cb_alert_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     added = add_alert(user_id, product_id)
     if added:
         text = (
-            f"✅ Alerta creada para:\n*{p['name']}*\n\n"
-            "Te avisaré cuando vuelva a estar en stock."
+            f"✅ <b>Alerta creada</b>\n"
+            f"{ui.divider()}\n"
+            f"{ui.product_card(p)}\n"
+            f"{ui.divider()}\n"
+            "Te notificaremos en cuanto vuelva al stock. 🎯"
         )
     else:
-        text = f"ℹ️ Ya tienes una alerta para *{p['name']}*."
+        text = (
+            f"ℹ️ <b>Alerta ya existente</b>\n"
+            f"{ui.divider()}\n"
+            f"Ya tienes una alerta activa para:\n<i>{ui.e(p['name'])}</i>"
+        )
 
-    keyboard = [[InlineKeyboardButton("🔔 Mis alertas", callback_data="menu:alerts"),
-                 InlineKeyboardButton("🏠 Menú", callback_data="menu:main")]]
-    await query.edit_message_text(text, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+    await query.edit_message_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("🔔  Mis alertas", callback_data="menu:alerts"),
+                InlineKeyboardButton("🏠  Inicio", callback_data="menu:main"),
+            ]
+        ]),
+    )
 
 
 async def cb_alert_del(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -177,11 +230,37 @@ async def cb_alert_del(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await query.answer()
     product_id = query.data.split(":")[1]
     user_id = update.effective_user.id
-    removed = remove_alert(user_id, product_id)
     p = cat.get_by_id(product_id)
     name = p["name"] if p else product_id
-    msg = f"🗑 Alerta eliminada: *{name}*" if removed else "ℹ️ Alerta no encontrada."
-    await query.edit_message_text(msg, parse_mode="Markdown")
+
+    remove_alert(user_id, product_id)
+
+    # Refresh the alerts list in-place
+    remaining = user_alerts(user_id)
+    if remaining:
+        text, markup = _alerts_text_and_markup(remaining)
+        header = f"🗑  <b>Alerta eliminada:</b> <i>{ui.e(name)}</i>\n\n" + text
+        await query.edit_message_text(header, parse_mode="HTML", reply_markup=markup)
+    else:
+        text, markup = _no_alerts_text_and_markup()
+        await query.edit_message_text(
+            f"🗑  <b>Alerta eliminada</b>\n\n{text}",
+            parse_mode="HTML",
+            reply_markup=markup,
+        )
+
+
+async def cb_alerts_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show alerts list via callback (from menu button)."""
+    query = update.callback_query
+    await query.answer()
+    user_id = update.effective_user.id
+    ids = user_alerts(user_id)
+    if not ids:
+        text, markup = _no_alerts_text_and_markup()
+    else:
+        text, markup = _alerts_text_and_markup(ids)
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
 
 
 def build_alert_conversation() -> ConversationHandler:
@@ -190,7 +269,7 @@ def build_alert_conversation() -> ConversationHandler:
         states={
             WAITING_ALERT_QUERY: [
                 MessageHandler(filters.TEXT & ~filters.COMMAND, receive_alert_query)
-            ]
+            ],
         },
         fallbacks=[CommandHandler("cancel", cancel_alert_conv)],
     )

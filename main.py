@@ -2,7 +2,7 @@
 
 import logging
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -11,13 +11,15 @@ from telegram.ext import (
 )
 
 import config
-from handlers.start import start, help_cmd
+from handlers.start import start, help_cmd, cb_main_menu
 from handlers.list_handler import (
     list_cmd,
     brands_cmd,
     stats_cmd,
     cb_list_page,
     cb_brand_page,
+    cb_brands,
+    cb_stats,
     cb_detail,
 )
 from handlers.search_handler import build_search_conversation
@@ -25,6 +27,7 @@ from handlers.alerts_handler import (
     myalerts_cmd,
     cb_alert_add,
     cb_alert_del,
+    cb_alerts_menu,
     build_alert_conversation,
 )
 from jobs.stock_checker import check_stock
@@ -36,65 +39,28 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def cb_main_menu(update: Update, context) -> None:
+async def cb_menu_search(update, context) -> None:
+    """Prompt user to type a search query via callback."""
+    import ui
     query = update.callback_query
     await query.answer()
-    keyboard = [
-        [
-            InlineKeyboardButton("📋 Ver catálogo", callback_data="menu:list:1"),
-            InlineKeyboardButton("🔍 Buscar", callback_data="menu:search"),
-        ],
-        [
-            InlineKeyboardButton("🔔 Mis alertas", callback_data="menu:alerts"),
-            InlineKeyboardButton("📊 Estadísticas", callback_data="menu:stats"),
-        ],
-    ]
     await query.edit_message_text(
-        "🏠 *Menú principal* — ¿Qué quieres hacer?",
-        parse_mode="Markdown",
-        reply_markup=InlineKeyboardMarkup(keyboard),
+        "🔍 <b>Buscar tabaco</b>\n"
+        f"{ui.divider()}\n"
+        "Envía el nombre, marca o referencia que buscas.\n"
+        "<i>Cancela con /cancel</i>",
+        parse_mode="HTML",
     )
-
-
-async def cb_menu_router(update: Update, context) -> None:
-    query = update.callback_query
-    parts = query.data.split(":")
-    action = parts[1]
-
-    if action == "main":
-        await cb_main_menu(update, context)
-    elif action == "list":
-        await cb_list_page(update, context)
-    elif action == "stats":
-        await query.answer()
-        await stats_cmd(update, context)
-    elif action == "alerts":
-        await query.answer()
-        from handlers.alerts_handler import all_alerts, _show_alerts
-        user_id = update.effective_user.id
-        ids = all_alerts().get(str(user_id), [])
-        if not ids:
-            await query.edit_message_text("📭 No tienes alertas activas.")
-        else:
-            await query.message.delete()
-            await _show_alerts(query.message, user_id, ids)
-    elif action == "search":
-        await query.answer()
-        await query.edit_message_text("🔍 Usa /search <texto> para buscar un tabaco.")
 
 
 def main() -> None:
-    app: Application = (
-        ApplicationBuilder()
-        .token(config.TELEGRAM_TOKEN)
-        .build()
-    )
+    app: Application = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
 
-    # ── Conversation handlers (must be added before plain command handlers)
+    # ── Conversations first (higher priority)
     app.add_handler(build_search_conversation())
     app.add_handler(build_alert_conversation())
 
-    # ── Command handlers
+    # ── Commands
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_cmd))
     app.add_handler(CommandHandler("list", list_cmd))
@@ -102,19 +68,27 @@ def main() -> None:
     app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CommandHandler("myalerts", myalerts_cmd))
 
-    # ── Callback query handlers
-    app.add_handler(CallbackQueryHandler(cb_menu_router, pattern=r"^menu:"))
-    app.add_handler(CallbackQueryHandler(cb_brand_page, pattern=r"^brand:"))
-    app.add_handler(CallbackQueryHandler(cb_detail, pattern=r"^detail:"))
+    # ── Menu callbacks (pattern: menu:<action>[:<page>])
+    app.add_handler(CallbackQueryHandler(cb_main_menu,   pattern=r"^menu:main$"))
+    app.add_handler(CallbackQueryHandler(cb_list_page,   pattern=r"^menu:list:\d+$"))
+    app.add_handler(CallbackQueryHandler(cb_brands,      pattern=r"^menu:brands$"))
+    app.add_handler(CallbackQueryHandler(cb_stats,       pattern=r"^menu:stats$"))
+    app.add_handler(CallbackQueryHandler(cb_alerts_menu, pattern=r"^menu:alerts$"))
+    app.add_handler(CallbackQueryHandler(cb_menu_search, pattern=r"^menu:search$"))
+
+    # ── Catalog callbacks
+    app.add_handler(CallbackQueryHandler(cb_brand_page, pattern=r"^brand:.+:\d+$"))
+    app.add_handler(CallbackQueryHandler(cb_detail,     pattern=r"^detail:"))
+
+    # ── Alert callbacks
     app.add_handler(CallbackQueryHandler(cb_alert_add, pattern=r"^alert_add:"))
     app.add_handler(CallbackQueryHandler(cb_alert_del, pattern=r"^alert_del:"))
-    app.add_handler(CallbackQueryHandler(lambda u, c: u.callback_query.answer(), pattern=r"^noop$"))
 
-    # ── Scheduled job: check stock every 30 min
+    # ── Scheduled stock check
     app.job_queue.run_repeating(
         check_stock,
         interval=config.STOCK_CHECK_INTERVAL,
-        first=60,  # first run 60s after start
+        first=60,
     )
 
     logger.info("Bot starting — polling...")

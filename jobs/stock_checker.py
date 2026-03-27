@@ -1,4 +1,4 @@
-"""Periodic job that checks stock and fires Telegram alerts."""
+"""Periodic job: checks stock and sends Telegram alerts."""
 
 from __future__ import annotations
 
@@ -7,18 +7,18 @@ import logging
 from telegram.ext import ContextTypes
 
 import catalog as cat
+import ui
 from handlers.alerts_handler import all_alerts, remove_alert
 
 logger = logging.getLogger(__name__)
 
 
 async def check_stock(context: ContextTypes.DEFAULT_TYPE) -> None:
-    logger.info("Stock check starting...")
+    logger.info("Stock check running…")
     try:
-        # Force fresh fetch from GitHub Pages
         cat.fetch_catalog(force=True)
     except Exception as exc:
-        logger.error("Failed to refresh catalog: %s", exc)
+        logger.error("Catalog refresh failed: %s", exc)
         return
 
     state = all_alerts()
@@ -34,15 +34,16 @@ async def check_stock(context: ContextTypes.DEFAULT_TYPE) -> None:
                     await context.bot.send_message(
                         chat_id=user_id,
                         text=(
-                            f"🎉 *¡Volvió al stock!*\n\n"
-                            f"*{p['name']}*\n"
-                            f"💶 {p['price']}\n"
-                            f"🔗 [Comprar ahora]({p['url']})"
+                            "🎉 <b>¡Volvió al stock!</b>\n"
+                            f"{ui.divider()}\n"
+                            f"{ui.product_card(p)}\n"
+                            f"{ui.divider()}\n"
+                            f'🛒 <a href="{ui.e(p["url"])}">Comprar ahora →</a>'
                         ),
-                        parse_mode="Markdown",
+                        parse_mode="HTML",
                         disable_web_page_preview=False,
                     )
                     remove_alert(user_id, pid)
-                    logger.info("Notified user %s about product %s", user_id, pid)
+                    logger.info("Notified user %s — product %s back in stock", user_id, pid)
                 except Exception as exc:
                     logger.error("Could not notify user %s: %s", user_id, exc)
