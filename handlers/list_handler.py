@@ -73,6 +73,20 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(text, parse_mode="HTML")
 
 
+async def novedades_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    products = cat.get_novedades()
+    if not products:
+        await update.message.reply_text(
+            "✨ <b>Sin novedades</b>\n"
+            f"{ui.divider()}\n"
+            "No hay productos nuevos en el último mes.",
+            parse_mode="HTML",
+        )
+        return
+    text, markup = _build_page(products, 1, "menu:novedades", title=f"Novedades — último mes")
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
+
+
 # ── Shared renderers ──────────────────────────────────────────────────────────
 
 def _stats_text() -> str:
@@ -126,6 +140,26 @@ async def cb_list_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     page = int(query.data.split(":")[-1])
     products = cat.get_products()
     text, markup = _build_page(products, page, "menu:list")
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
+
+
+async def cb_novedades_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    page = int(query.data.split(":")[-1])
+    products = cat.get_novedades()
+    if not products:
+        await query.edit_message_text(
+            "✨ <b>Sin novedades</b>\n"
+            f"{ui.divider()}\n"
+            "No hay productos nuevos en el último mes.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🏠  Inicio", callback_data="menu:main")]
+            ]),
+        )
+        return
+    text, markup = _build_page(products, page, "menu:novedades", title="Novedades — último mes")
     await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
 
 

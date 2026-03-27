@@ -6,14 +6,16 @@ import ui
 
 
 def _main_menu_keyboard() -> InlineKeyboardMarkup:
+    novedades = cat.get_novedades()
+    nov_label = f"✨  Novedades ({len(novedades)})" if novedades else "✨  Novedades"
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📋  Catálogo", callback_data="menu:list:1"),
             InlineKeyboardButton("🏷  Marcas", callback_data="menu:brands"),
         ],
         [
+            InlineKeyboardButton(nov_label, callback_data="menu:novedades:1"),
             InlineKeyboardButton("🔍  Buscar", callback_data="menu:search"),
-            InlineKeyboardButton("📊  Stats", callback_data="menu:stats"),
         ],
         [
             InlineKeyboardButton("🔔  Mis alertas", callback_data="menu:alerts"),
@@ -65,10 +67,10 @@ async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/start — Menú principal\n"
         "/list — Catálogo completo\n"
         "/brands — Ver marcas\n"
+        "/novedades — Productos nuevos (último mes)\n"
         "/search — Buscar tabaco\n"
         "/alert — Crear alerta de reposición\n"
         "/myalerts — Gestionar tus alertas\n"
-        "/stats — Estadísticas\n"
         "/help — Esta ayuda"
     )
     await update.message.reply_text(text, parse_mode="HTML")

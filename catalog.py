@@ -25,8 +25,17 @@ def fetch_catalog(force: bool = False) -> dict[str, Any]:
     return _cache
 
 
+def _by_id_desc(products: list[dict]) -> list[dict]:
+    return sorted(products, key=lambda p: int(p["product_id"]), reverse=True)
+
+
 def get_products(force: bool = False) -> list[dict]:
-    return fetch_catalog(force).get("products", [])
+    return _by_id_desc(fetch_catalog(force).get("products", []))
+
+
+def get_novedades() -> list[dict]:
+    """Products first seen within the last 30 days (is_new flag set by scraper)."""
+    return [p for p in get_products() if p.get("is_new")]
 
 
 def get_brands() -> list[str]:
