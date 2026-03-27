@@ -19,8 +19,10 @@ from handlers.list_handler import (
     brands_cmd,
     stats_cmd,
     novedades_cmd,
+    oos_cmd,
     cb_list_page,
     cb_novedades_page,
+    cb_oos_page,
     cb_brand_page,
     cb_brands,
     cb_stats,
@@ -57,6 +59,7 @@ def main() -> None:
     app.add_handler(CommandHandler("list", list_cmd))
     app.add_handler(CommandHandler("brands", brands_cmd))
     app.add_handler(CommandHandler("novedades", novedades_cmd))
+    app.add_handler(CommandHandler("agotados", oos_cmd))
     app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CommandHandler("myalerts", myalerts_cmd))
 
@@ -64,6 +67,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(cb_main_menu,      pattern=r"^menu:main$"))
     app.add_handler(CallbackQueryHandler(cb_list_page,      pattern=r"^menu:list:\d+$"))
     app.add_handler(CallbackQueryHandler(cb_novedades_page, pattern=r"^menu:novedades:\d+$"))
+    app.add_handler(CallbackQueryHandler(cb_oos_page,       pattern=r"^menu:oos:\d+$"))
     app.add_handler(CallbackQueryHandler(cb_brands,         pattern=r"^menu:brands$"))
     app.add_handler(CallbackQueryHandler(cb_stats,          pattern=r"^menu:stats$"))
     app.add_handler(CallbackQueryHandler(cb_alerts_menu,    pattern=r"^menu:alerts$"))

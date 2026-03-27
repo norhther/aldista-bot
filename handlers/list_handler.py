@@ -73,6 +73,21 @@ async def stats_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(text, parse_mode="HTML")
 
 
+async def oos_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    products = [p for p in cat.get_products() if p["stock_status"] == "out_of_stock"]
+    text, markup = _build_page(products, 1, "menu:oos", title="Agotados")
+    await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
+
+
+async def cb_oos_page(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    page = int(query.data.split(":")[-1])
+    products = [p for p in cat.get_products() if p["stock_status"] == "out_of_stock"]
+    text, markup = _build_page(products, page, "menu:oos", title="Agotados")
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
+
+
 async def novedades_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     products = cat.get_novedades()
     if not products:

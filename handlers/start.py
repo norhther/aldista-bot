@@ -19,6 +19,7 @@ def _main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🔍  Buscar", callback_data="menu:search"),
         ],
         [
+            InlineKeyboardButton("🔴  Agotados", callback_data="menu:oos:1"),
             InlineKeyboardButton("🔔  Mis alertas", callback_data="menu:alerts"),
         ],
     ])
