@@ -32,8 +32,6 @@ def _main_menu_text() -> str:
     bar = "█" * bar_filled + "░" * (20 - bar_filled)
 
     return (
-        "🪴 <b>Aldista Tobacco Bot</b>\n"
-        f"{ui.divider()}\n"
         f"<code>{bar}</code>  {pct}%\n"
         f"🗂  <b>{stats['total']}</b> productos   "
         f"🟢 <b>{stats['in_stock']}</b> disponibles   "
