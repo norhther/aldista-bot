@@ -83,7 +83,7 @@ async def novedades_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             parse_mode="HTML",
         )
         return
-    text, markup = _build_page(products, 1, "menu:novedades", title=f"Novedades — último mes")
+    text, markup = _build_page(products, 1, "menu:novedades", title="Novedades — nuevos en catálogo")
     await update.message.reply_text(text, parse_mode="HTML", reply_markup=markup)
 
 
@@ -159,7 +159,7 @@ async def cb_novedades_page(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             ]),
         )
         return
-    text, markup = _build_page(products, page, "menu:novedades", title="Novedades — último mes")
+    text, markup = _build_page(products, page, "menu:novedades", title="Novedades — nuevos en catálogo")
     await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
 
 

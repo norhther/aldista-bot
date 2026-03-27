@@ -7,3 +7,5 @@ venv/
 *.egg-info/
 .DS_Store
 alerts_state.json
+known_ids.json
+users_state.json

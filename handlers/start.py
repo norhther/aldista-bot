@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 import catalog as cat
 import ui
+import users
 
 
 def _main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -43,6 +44,7 @@ def _main_menu_text() -> str:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    users.register(update.effective_user.id)
     await update.message.reply_text(
         _main_menu_text(),
         parse_mode="HTML",
